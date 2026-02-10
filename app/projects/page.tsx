@@ -16,7 +16,6 @@ import {
 } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import {
   Popover,
   PopoverContent,
@@ -28,55 +27,93 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { ModeToggle } from "@/components/modeToggle"
 
 interface Project {
   id: string
   name: string
+  createdAt?: string
 }
 
-const initialProjects: Project[] = [
-  { id: "marketing-dashboard", name: "Marketing Dashboard" },
-  { id: "e-commerce-platform", name: "E-commerce Platform" },
-  { id: "customer-analytics", name: "Customer Analytics" },
-]
-
 const ProjectsPage = () => {
-  const [projects, setProjects] = React.useState<Project[]>(initialProjects)
+  const [projects, setProjects] = React.useState<Project[]>([])
   const [newProjectName, setNewProjectName] = React.useState("")
   const [isDialogOpen, setIsDialogOpen] = React.useState(false)
   const [renamingProjectId, setRenamingProjectId] = React.useState<string | null>(null)
   const [renameValue, setRenameValue] = React.useState("")
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = React.useState(false)
+  const [isLoading, setIsLoading] = React.useState(true)
 
-  const handleCreateProject = () => {
-    if (newProjectName.trim()) {
-      const slug = newProjectName
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/(^-|-$)/g, "")
-      const newProject: Project = {
-        id: slug,
-        name: newProjectName.trim(),
+  React.useEffect(() => {
+    fetchProjects()
+  }, [])
+
+  const fetchProjects = async () => {
+    try {
+      const res = await fetch("/api/projects")
+      if (res.ok) {
+        const data = await res.json()
+        setProjects(data)
       }
-      setProjects([...projects, newProject])
-      setNewProjectName("")
-      setIsCreateDialogOpen(false)
+    } catch {
+      console.error("Failed to fetch projects")
+    } finally {
+      setIsLoading(false)
     }
   }
 
-  const handleDeleteProject = (projectId: string) => {
-    setProjects(projects.filter((p) => p.id !== projectId))
+  const handleCreateProject = async () => {
+    if (newProjectName.trim()) {
+      try {
+        const res = await fetch("/api/projects", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: newProjectName }),
+        })
+        if (res.ok) {
+          const newProject = await res.json()
+          setProjects([newProject, ...projects])
+          setNewProjectName("")
+          setIsDialogOpen(false)
+        }
+      } catch {
+        console.error("Failed to create project")
+      }
+    }
   }
 
-  const handleRenameProject = (projectId: string) => {
+  const handleDeleteProject = async (projectId: string) => {
+    try {
+      const res = await fetch(`/api/projects?id=${projectId}`, {
+        method: "DELETE",
+      })
+      if (res.ok) {
+        setProjects(projects.filter((p) => p.id !== projectId))
+      }
+    } catch {
+      console.error("Failed to delete project")
+    }
+  }
+
+  const handleRenameProject = async (projectId: string) => {
     if (renameValue.trim()) {
-      setProjects(
-        projects.map((p) =>
-          p.id === projectId ? { ...p, name: renameValue.trim() } : p
-        )
-      )
-      setRenamingProjectId(null)
-      setRenameValue("")
+      try {
+        const res = await fetch("/api/projects", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: projectId, name: renameValue }),
+        })
+        if (res.ok) {
+          setProjects(
+            projects.map((p) =>
+              p.id === projectId ? { ...p, name: renameValue.trim() } : p
+            )
+          )
+          setRenamingProjectId(null)
+          setRenameValue("")
+        }
+      } catch {
+        console.error("Failed to rename project")
+      }
     }
   }
 
@@ -96,18 +133,25 @@ const ProjectsPage = () => {
           <h1 className="text-3xl font-bold tracking-tight">Projects</h1>
           <p className="text-muted-foreground">Manage and organize your projects</p>
         </div>
-        <Button onClick={() => setIsCreateDialogOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          New Project
-        </Button>
+        <div className="flex items-center gap-2">
+          <ModeToggle />
+          <Button onClick={() => setIsDialogOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            New Project
+          </Button>
+        </div>
       </div>
 
-      {projects.length === 0 ? (
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <p className="text-muted-foreground">Loading projects...</p>
+        </div>
+      ) : projects.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <FolderOpen className="h-12 w-12 text-muted-foreground mb-4" />
           <h3 className="text-lg font-medium">No projects yet</h3>
           <p className="text-muted-foreground mb-4">Create your first project to get started</p>
-          <Button onClick={() => setIsCreateDialogOpen(true)}>
+          <Button onClick={() => setIsDialogOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
             Create Project
           </Button>
@@ -204,16 +248,15 @@ const ProjectsPage = () => {
         </div>
       )}
 
-      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Create New Project</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-4">
             <div className="space-y-2">
-              <Label htmlFor="projectName">Project Name</Label>
+              <label className="text-sm font-medium">Project Name</label>
               <Input
-                id="projectName"
                 placeholder="Enter project name"
                 value={newProjectName}
                 onChange={(e) => setNewProjectName(e.target.value)}
@@ -227,7 +270,7 @@ const ProjectsPage = () => {
             <div className="flex justify-end gap-2">
               <Button
                 variant="outline"
-                onClick={() => setIsCreateDialogOpen(false)}
+                onClick={() => setIsDialogOpen(false)}
               >
                 Cancel
               </Button>

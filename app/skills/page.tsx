@@ -51,102 +51,10 @@ interface Skill {
   id: string
   name: string
   description: string
-  content: string
   category: string
+  content?: string
+  createdAt?: string
 }
-
-const initialSkills: Skill[] = [
-  {
-    id: "data-analysis",
-    name: "Data Analysis",
-    description: "Advanced data analysis capabilities for business intelligence",
-    content: `This skill enables advanced data analysis capabilities for business intelligence tasks.
-
-## Capabilities
-
-### Data Processing
-- Load and parse various data formats (CSV, JSON, Excel)
-- Clean and preprocess raw data
-- Handle missing values and outliers
-- Perform data type conversions
-
-### Statistical Analysis
-- Descriptive statistics (mean, median, mode, std dev)
-- Correlation analysis
-- Hypothesis testing
-- Regression analysis
-- Time series analysis
-
-## Usage Example
-\`\`\`python
-import pandas as pd
-from skills import DataAnalysis
-
-data = pd.read_csv("sales_data.csv")
-analysis = DataAnalysis.analyze(data)
-\`\`\``,
-    category: "analytics",
-  },
-  {
-    id: "business-intelligence",
-    name: "Business Intelligence",
-    description: "Comprehensive BI capabilities for strategic decision-making",
-    content: `Business Intelligence skill provides comprehensive capabilities for strategic decision-making.
-
-## Key Features
-
-### KPI Dashboard
-- Real-time metric tracking
-- Custom KPI creation
-- Threshold alerts
-- Trend indicators
-
-### Report Generation
-- Automated report scheduling
-- Multi-format export (PDF, Excel, HTML)
-- Customizable templates
-
-## Implementation
-\`\`\`python
-from skills import BusinessIntelligence
-
-dashboard = BusinessIntelligence.Dashboard()
-dashboard.add_kpi("revenue", source="finance_db")
-\`\`\``,
-    category: "business",
-  },
-  {
-    id: "predictive-analytics",
-    name: "Predictive Analytics",
-    description: "ML-powered predictive analytics for forecasting",
-    content: `Machine learning-powered predictive analytics for forecasting and trend prediction.
-
-## Models Available
-
-### Forecasting Models
-- ARIMA for time series
-- Prophet for seasonal data
-- LSTM neural networks
-
-### Classification Models
-- Random Forest
-- Gradient Boosting
-- Support Vector Machines
-
-## Code Example
-\`\`\`python
-from skills import PredictiveAnalytics
-
-model = PredictiveAnalytics.Forecaster(
-    model_type="prophet",
-    seasonality=True
-)
-model.train(data, target="sales")
-predictions = model.predict(steps=30)
-\`\`\``,
-    category: "analytics",
-  },
-]
 
 const categories = [
   { id: "analytics", name: "Analytics" },
@@ -156,7 +64,7 @@ const categories = [
 ]
 
 const SkillsPage = () => {
-  const [skills, setSkills] = React.useState<Skill[]>(initialSkills)
+  const [skills, setSkills] = React.useState<Skill[]>([])
   const [newSkillName, setNewSkillName] = React.useState("")
   const [newSkillDescription, setNewSkillDescription] = React.useState("")
   const [newSkillCategory, setNewSkillCategory] = React.useState("analytics")
@@ -167,39 +75,73 @@ const SkillsPage = () => {
   const [viewTab, setViewTab] = React.useState("preview")
   const [editSkillId, setEditSkillId] = React.useState<string | null>(null)
   const [editContent, setEditContent] = React.useState("")
+  const [isLoading, setIsLoading] = React.useState(true)
 
-  const handleCreateSkill = () => {
-    if (newSkillName.trim()) {
-      const slug = newSkillName
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/(^-|-$)/g, "")
-      const newSkill: Skill = {
-        id: slug,
-        name: newSkillName.trim(),
-        description: newSkillDescription.trim(),
-        content: newSkillContent || `# ${newSkillName.trim()}\n\nAdd your skill content here.`,
-        category: newSkillCategory,
+  React.useEffect(() => {
+    fetchSkills()
+  }, [])
+
+  const fetchSkills = async () => {
+    try {
+      const res = await fetch("/api/skills")
+      if (res.ok) {
+        const data = await res.json()
+        setSkills(data)
       }
-      setSkills([...skills, newSkill])
-      setNewSkillName("")
-      setNewSkillDescription("")
-      setNewSkillCategory("analytics")
-      setNewSkillContent("")
-      setIsCreateDialogOpen(false)
+    } catch {
+      console.error("Failed to fetch skills")
+    } finally {
+      setIsLoading(false)
     }
   }
 
-  const handleDeleteSkill = (skillId: string) => {
-    setSkills(skills.filter((s) => s.id !== skillId))
-    if (selectedSkill?.id === skillId) {
-      setSelectedSkill(null)
+  const handleCreateSkill = async () => {
+    if (newSkillName.trim()) {
+      try {
+        const res = await fetch("/api/skills", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: newSkillName,
+            description: newSkillDescription,
+            category: newSkillCategory,
+            content: newSkillContent || `# ${newSkillName.trim()}\n\nAdd your skill content here.`,
+          }),
+        })
+        if (res.ok) {
+          const newSkill = await res.json()
+          setSkills([newSkill, ...skills])
+          setNewSkillName("")
+          setNewSkillDescription("")
+          setNewSkillCategory("analytics")
+          setNewSkillContent("")
+          setIsCreateDialogOpen(false)
+        }
+      } catch {
+        console.error("Failed to create skill")
+      }
+    }
+  }
+
+  const handleDeleteSkill = async (skillId: string) => {
+    try {
+      const res = await fetch(`/api/skills?id=${skillId}`, {
+        method: "DELETE",
+      })
+      if (res.ok) {
+        setSkills(skills.filter((s) => s.id !== skillId))
+        if (selectedSkill?.id === skillId) {
+          setSelectedSkill(null)
+        }
+      }
+    } catch {
+      console.error("Failed to delete skill")
     }
   }
 
   const handleViewSkill = (skill: Skill) => {
     setSelectedSkill(skill)
-    setEditContent(skill.content)
+    setEditContent(skill.content || "")
     setEditSkillId(null)
     setIsViewDialogOpen(true)
     setViewTab("preview")
@@ -207,19 +149,30 @@ const SkillsPage = () => {
 
   const handleEditSkill = (skill: Skill) => {
     setEditSkillId(skill.id)
-    setEditContent(skill.content)
+    setEditContent(skill.content || "")
     setViewTab("code")
   }
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (selectedSkill && editSkillId) {
-      setSkills(
-        skills.map((s) =>
-          s.id === editSkillId ? { ...s, content: editContent } : s
-        )
-      )
-      setSelectedSkill({ ...selectedSkill, content: editContent })
-      setEditSkillId(null)
+      try {
+        const res = await fetch("/api/skills", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: editSkillId, content: editContent }),
+        })
+        if (res.ok) {
+          setSkills(
+            skills.map((s) =>
+              s.id === editSkillId ? { ...s, content: editContent } : s
+            )
+          )
+          setSelectedSkill({ ...selectedSkill, content: editContent })
+          setEditSkillId(null)
+        }
+      } catch {
+        console.error("Failed to update skill")
+      }
     }
   }
 
@@ -260,7 +213,11 @@ const SkillsPage = () => {
         </Button>
       </div>
 
-      {skills.length === 0 ? (
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <p className="text-muted-foreground">Loading skills...</p>
+        </div>
+      ) : skills.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-12 text-center">
           <FolderOpen className="h-12 w-12 text-muted-foreground mb-4" />
           <h3 className="text-lg font-medium">No skills yet</h3>
@@ -470,7 +427,7 @@ const SkillsPage = () => {
                 <div
                   className="h-[60vh] p-4 border rounded-md overflow-auto prose prose-sm max-w-none"
                   dangerouslySetInnerHTML={{
-                    __html: renderMarkdown(selectedSkill.content),
+                    __html: renderMarkdown(selectedSkill.content || ""),
                   }}
                 />
               </TabsContent>
@@ -489,7 +446,7 @@ const SkillsPage = () => {
                           size="sm"
                           onClick={() => {
                             setEditSkillId(null)
-                            setEditContent(selectedSkill.content)
+                            setEditContent(selectedSkill.content || "")
                           }}
                         >
                           Cancel

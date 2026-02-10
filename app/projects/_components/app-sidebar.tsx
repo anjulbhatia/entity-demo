@@ -14,7 +14,6 @@ import {
   Pencil,
   Trash2,
   ExternalLink,
-  Flame,
 } from "lucide-react"
 import {
   Sidebar,
@@ -46,13 +45,8 @@ import Image from "next/image"
 interface Project {
   id: string
   name: string
+  createdAt?: string
 }
-
-const initialProjects: Project[] = [
-  { id: "marketing-dashboard", name: "Marketing Dashboard" },
-  { id: "e-commerce-platform", name: "E-commerce Platform" },
-  { id: "customer-analytics", name: "Customer Analytics" },
-]
 
 const teams = [
   { id: "1", name: "Team A" },
@@ -60,41 +54,84 @@ const teams = [
 ]
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const [projects, setProjects] = React.useState<Project[]>(initialProjects)
+  const [projects, setProjects] = React.useState<Project[]>([])
   const [newProjectName, setNewProjectName] = React.useState("")
   const [isProjectsOpen, setIsProjectsOpen] = React.useState(true)
   const [searchQuery, setSearchQuery] = React.useState("")
   const [renamingProjectId, setRenamingProjectId] = React.useState<string | null>(null)
   const [renameValue, setRenameValue] = React.useState("")
+  const [isLoading, setIsLoading] = React.useState(true)
 
-  const handleAddProject = () => {
-    if (newProjectName.trim()) {
-      const slug = newProjectName
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/(^-|-$)/g, "")
-      const newProject: Project = {
-        id: slug,
-        name: newProjectName.trim(),
+  React.useEffect(() => {
+    fetchProjects()
+  }, [])
+
+  const fetchProjects = async () => {
+    try {
+      const res = await fetch("/api/projects")
+      if (res.ok) {
+        const data = await res.json()
+        setProjects(data)
       }
-      setProjects([...projects, newProject])
-      setNewProjectName("")
+    } catch {
+      console.error("Failed to fetch projects")
+    } finally {
+      setIsLoading(false)
     }
   }
 
-  const handleDeleteProject = (projectId: string) => {
-    setProjects(projects.filter((p) => p.id !== projectId))
+  const handleAddProject = async () => {
+    if (newProjectName.trim()) {
+      try {
+        const res = await fetch("/api/projects", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: newProjectName }),
+        })
+        if (res.ok) {
+          const newProject = await res.json()
+          setProjects([newProject, ...projects])
+          setNewProjectName("")
+        }
+      } catch {
+        console.error("Failed to create project")
+      }
+    }
   }
 
-  const handleRenameProject = (projectId: string) => {
+  const handleDeleteProject = async (projectId: string) => {
+    try {
+      const res = await fetch(`/api/projects?id=${projectId}`, {
+        method: "DELETE",
+      })
+      if (res.ok) {
+        setProjects(projects.filter((p) => p.id !== projectId))
+      }
+    } catch {
+      console.error("Failed to delete project")
+    }
+  }
+
+  const handleRenameProject = async (projectId: string) => {
     if (renameValue.trim()) {
-      setProjects(
-        projects.map((p) =>
-          p.id === projectId ? { ...p, name: renameValue.trim() } : p
-        )
-      )
-      setRenamingProjectId(null)
-      setRenameValue("")
+      try {
+        const res = await fetch("/api/projects", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: projectId, name: renameValue }),
+        })
+        if (res.ok) {
+          setProjects(
+            projects.map((p) =>
+              p.id === projectId ? { ...p, name: renameValue.trim() } : p
+            )
+          )
+          setRenamingProjectId(null)
+          setRenameValue("")
+        }
+      } catch {
+        console.error("Failed to rename project")
+      }
     }
   }
 
@@ -120,8 +157,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               <PopoverTrigger asChild>
                 <SidebarMenuButton className="w-full justify-between cursor-pointer">
                   <div className="flex items-center gap-2">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg ">
-                      <Image src={"/icon-entity.png"} alt="Icon" width={12} height={12} className="h-5 w-5 text-amber-400" />
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg">
+                      <Image src={"/icon-entity.png"} alt="" width={16} height={16}  className="h-5 w-5 text-stone-100" />
                     </div>
                     <span className="font-semibold">Entity</span>
                   </div>
@@ -232,9 +269,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                       </div>
                       <div className="grid gap-2">
                         <div className="grid gap-1.5">
-                          <Label htmlFor="name">Project Name</Label>
+                          <Label htmlFor="sidebar-project-name">Project Name</Label>
                           <Input
-                            id="name"
+                            id="sidebar-project-name"
                             placeholder="Enter project name"
                             value={newProjectName}
                             onChange={(e) => setNewProjectName(e.target.value)}
@@ -260,62 +297,96 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="h-8"
                   />
-                  {filteredProjects.length > 0 ? (
+                  {isLoading ? (
+                    <p className="text-xs text-muted-foreground px-2">
+                      Loading...
+                    </p>
+                  ) : filteredProjects.length > 0 ? (
                     filteredProjects.map((project) => (
                       <div
                         key={project.id}
                         className="flex items-center gap-1 group/menu-item relative"
                       >
-                        <SidebarMenuButton
-                          className="flex-1 justify-start cursor-pointer"
-                          asChild
-                        >
-                          <a href={`/projects/${project.id}`}>
-                            <span className="truncate">{project.name}</span>
-                          </a>
-                        </SidebarMenuButton>
-                        <Popover>
-                          <PopoverTrigger asChild>
+                        {renamingProjectId === project.id ? (
+                          <div className="flex-1 flex gap-1 px-2">
+                            <Input
+                              value={renameValue}
+                              onChange={(e) => setRenameValue(e.target.value)}
+                              className="h-7 text-xs"
+                              autoFocus
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  handleRenameProject(project.id)
+                                }
+                                if (e.key === "Escape") {
+                                  setRenamingProjectId(null)
+                                  setRenameValue("")
+                                }
+                              }}
+                            />
                             <Button
+                              size="sm"
                               variant="ghost"
-                              size="icon"
-                              className="h-6 w-6 opacity-0 group-hover/menu-item:opacity-100"
+                              className="h-7 px-1"
+                              onClick={() => handleRenameProject(project.id)}
                             >
-                              <MoreHorizontal className="h-3 w-3" />
+                              Save
                             </Button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-48" align="end" side="right">
-                            <div className="space-y-1">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="w-full justify-start"
-                                onClick={() => openProject(project.id)}
-                              >
-                                <ExternalLink className="h-4 w-4 mr-2" />
-                                Open
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="w-full justify-start"
-                                onClick={() => startRename(project)}
-                              >
-                                <Pencil className="h-4 w-4 mr-2" />
-                                Rename
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="w-full justify-start text-destructive"
-                                onClick={() => handleDeleteProject(project.id)}
-                              >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Delete
-                              </Button>
-                            </div>
-                          </PopoverContent>
-                        </Popover>
+                          </div>
+                        ) : (
+                          <>
+                            <SidebarMenuButton
+                              className="flex-1 justify-start cursor-pointer"
+                              asChild
+                            >
+                              <a href={`/projects/${project.id}`}>
+                                <span className="truncate">{project.name}</span>
+                              </a>
+                            </SidebarMenuButton>
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6 opacity-0 group-hover/menu-item:opacity-100"
+                                >
+                                  <MoreHorizontal className="h-3 w-3" />
+                                </Button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-48" align="end" side="right">
+                                <div className="space-y-1">
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="w-full justify-start"
+                                    onClick={() => openProject(project.id)}
+                                  >
+                                    <ExternalLink className="h-4 w-4 mr-2" />
+                                    Open
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="w-full justify-start"
+                                    onClick={() => startRename(project)}
+                                  >
+                                    <Pencil className="h-4 w-4 mr-2" />
+                                    Rename
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="w-full justify-start text-destructive"
+                                    onClick={() => handleDeleteProject(project.id)}
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete
+                                  </Button>
+                                </div>
+                              </PopoverContent>
+                            </Popover>
+                          </>
+                        )}
                       </div>
                     ))
                   ) : (

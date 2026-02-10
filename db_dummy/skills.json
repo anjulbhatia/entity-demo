@@ -1,0 +1,23 @@
+[
+  {
+    "id": "data-analysis",
+    "name": "Data Analysis",
+    "description": "Advanced data analysis capabilities for business intelligence",
+    "category": "analytics",
+    "createdAt": "2024-01-15T10:00:00Z"
+  },
+  {
+    "id": "business-intelligence",
+    "name": "Business Intelligence",
+    "description": "Comprehensive BI capabilities for strategic decision-making",
+    "category": "business",
+    "createdAt": "2024-01-20T14:30:00Z"
+  },
+  {
+    "id": "predictive-analytics",
+    "name": "Predictive Analytics",
+    "description": "ML-powered predictive analytics for forecasting",
+    "category": "analytics",
+    "createdAt": "2024-02-01T09:15:00Z"
+  }
+]
